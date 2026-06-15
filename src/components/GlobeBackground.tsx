@@ -323,10 +323,18 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
         if (!viewer) return
         const camera = viewer.camera
         const amount = Cesium.Math.toRadians(5)
-        if (tiltUp) {
-          camera.lookUp(amount)
+        if (isRotatingRef.current) {
+          if (tiltUp) {
+            camera.rotateDown(amount)
+          } else {
+            camera.rotateUp(amount)
+          }
         } else {
-          camera.lookDown(amount)
+          if (tiltUp) {
+            camera.lookUp(amount)
+          } else {
+            camera.lookDown(amount)
+          }
         }
       },
 
@@ -335,10 +343,18 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
         if (!viewer) return
         const camera = viewer.camera
         const amount = Cesium.Math.toRadians(15)
-        if (clockwise) {
-          camera.lookRight(amount)
+        if (isRotatingRef.current) {
+          if (clockwise) {
+            camera.rotateRight(amount)
+          } else {
+            camera.rotateLeft(amount)
+          }
         } else {
-          camera.lookLeft(amount)
+          if (clockwise) {
+            camera.lookRight(amount)
+          } else {
+            camera.lookLeft(amount)
+          }
         }
       },
 
@@ -357,10 +373,32 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
 
       toggleRotation: () => {
         isRotatingRef.current = !isRotatingRef.current
-        if (isRotatingRef.current && viewerRef.current) {
+        const viewer = viewerRef.current
+        if (isRotatingRef.current && viewer) {
           lastTimeRef.current = performance.now()
+          
+          // Try to find the screen center on the 3D tiles or ellipsoid
+          const canvas = viewer.scene.canvas
+          const screenCenter = new Cesium.Cartesian2(canvas.clientWidth / 2, canvas.clientHeight / 2)
+          let pickedCartesian: Cesium.Cartesian3 | undefined = viewer.scene.pickPosition(screenCenter)
+          
+          if (!pickedCartesian) {
+            const ray = viewer.camera.getPickRay(screenCenter)
+            if (ray) {
+              pickedCartesian = viewer.scene.globe.pick(ray, viewer.scene)
+            }
+          }
+          
+          // If a center is found, update orbitCenterRef.current to avoid snapping on resume
+          if (pickedCartesian) {
+            const cartographic = Cesium.Cartographic.fromCartesian(pickedCartesian)
+            const lng = Cesium.Math.toDegrees(cartographic.longitude)
+            const lat = Cesium.Math.toDegrees(cartographic.latitude)
+            orbitCenterRef.current = { lat, lng }
+          }
+
           const target = Cesium.Cartesian3.fromDegrees(orbitCenterRef.current.lng, orbitCenterRef.current.lat)
-          const distance = Cesium.Cartesian3.distance(viewerRef.current.camera.position, target)
+          const distance = Cesium.Cartesian3.distance(viewer.camera.positionWC, target)
           if (distance > 5 && distance < 30000) {
             rotationRangeRef.current = distance
           } else {

@@ -582,18 +582,28 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
           const delta = (now - lastTimeRef.current) / 1000
           lastTimeRef.current = now
 
-          // Orbit speed: 5 degrees per second * speed ratio
-          const headingDelta = Cesium.Math.toRadians(5 * speedRef.current * delta)
-          const newHeading = viewer.camera.heading + headingDelta
-
-          // Dynamically read camera position to compute distance in world coordinates.
-          // In the first tick (where camera.transform is Matrix4.IDENTITY), camera.position is in world coordinates.
-          // Otherwise, we use camera.positionWC to prevent coordinate frame mismatch.
+          // Get the camera's current world position
           const cameraPosition = viewer.camera.transform.equals(Cesium.Matrix4.IDENTITY) 
             ? viewer.camera.position 
-            : viewer.camera.positionWC;
-          const liveRange = Cesium.Cartesian3.distance(cameraPosition, propertyTargetCartesianPosition);
-          const currentPitch = viewer.camera.pitch; // Keep current pitch
+            : viewer.camera.positionWC
+
+          // Calculate local coordinates relative to the target transform to avoid heading/pitch snaps
+          const inverseTransform = Cesium.Matrix4.inverse(transform, new Cesium.Matrix4())
+          const localPosition = Cesium.Matrix4.multiplyByPoint(inverseTransform, cameraPosition, new Cesium.Cartesian3())
+
+          // Compute exact live range, heading, and pitch relative to target
+          const liveRange = Cesium.Cartesian3.magnitude(localPosition)
+          
+          // Math.atan2(-x, -y) yields local heading (0 = looking North from South)
+          const currentHeading = Math.atan2(-localPosition.x, -localPosition.y)
+          
+          // Math.atan2(-z, horizontalDistance) yields local pitch (negative is looking down)
+          const horizontalDistance = Math.sqrt(localPosition.x * localPosition.x + localPosition.y * localPosition.y)
+          const currentPitch = Math.atan2(-localPosition.z, horizontalDistance)
+
+          // Orbit speed: 5 degrees per second * speed ratio
+          const headingDelta = Cesium.Math.toRadians(5 * speedRef.current * delta)
+          const newHeading = currentHeading + headingDelta
 
           // Rotate dynamically with liveRange to keep zoom interactive
           viewer.camera.lookAtTransform(

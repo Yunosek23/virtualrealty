@@ -72,6 +72,8 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
     const isRotatingRef = useRef<boolean>(true)
     const lastTimeRef = useRef<number>(performance.now())
     const rotationRangeRef = useRef<number>(25000000)
+    const orbitHeadingRef = useRef<number>(0)
+    const orbitPitchRef = useRef<number>(0)
 
 
     // Entity references for boundary drawing
@@ -620,33 +622,26 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
           const delta = (now - lastTimeRef.current) / 1000
           lastTimeRef.current = now
 
-          // Get the camera's current world position
-          const cameraPosition = viewer.camera.transform.equals(Cesium.Matrix4.IDENTITY) 
-            ? viewer.camera.position 
-            : viewer.camera.positionWC
-
-          // Calculate local coordinates relative to the target transform to avoid heading/pitch snaps
-          const inverseTransform = Cesium.Matrix4.inverse(transform, new Cesium.Matrix4())
-          const localPosition = Cesium.Matrix4.multiplyByPoint(inverseTransform, cameraPosition, new Cesium.Cartesian3())
-
-          // Compute exact live range, heading, and pitch relative to target
-          const liveRange = Cesium.Cartesian3.magnitude(localPosition)
-          
-          // Math.atan2(-x, -y) yields local heading (0 = looking North from South)
-          const currentHeading = Math.atan2(-localPosition.x, -localPosition.y)
-          
-          // Math.atan2(-z, horizontalDistance) yields local pitch (negative is looking down)
-          const horizontalDistance = Math.sqrt(localPosition.x * localPosition.x + localPosition.y * localPosition.y)
-          const currentPitch = Math.atan2(-localPosition.z, horizontalDistance)
+          if (viewer.camera.transform.equals(Cesium.Matrix4.IDENTITY)) {
+            // First frame: initialize orbit states from the current camera state to guarantee zero-snap on start/resume
+            rotationRangeRef.current = Cesium.Cartesian3.distance(viewer.camera.positionWC, propertyTargetCartesianPosition)
+            orbitHeadingRef.current = viewer.camera.heading
+            orbitPitchRef.current = viewer.camera.pitch
+          } else {
+            // Subsequent frames: read updated range, pitch, and heading to preserve manual mouse zoom/pan/tilt adjustments
+            rotationRangeRef.current = Cesium.Cartesian3.magnitude(viewer.camera.position)
+            orbitPitchRef.current = viewer.camera.pitch
+            orbitHeadingRef.current = viewer.camera.heading
+          }
 
           // Orbit speed: 5 degrees per second * speed ratio
           const headingDelta = Cesium.Math.toRadians(5 * speedRef.current * delta)
-          const newHeading = currentHeading + headingDelta
+          orbitHeadingRef.current += headingDelta
 
-          // Rotate dynamically with liveRange to keep zoom interactive
+          // Rotate dynamically relative to the target transform
           viewer.camera.lookAtTransform(
             transform,
-            new Cesium.HeadingPitchRange(newHeading, currentPitch, liveRange)
+            new Cesium.HeadingPitchRange(orbitHeadingRef.current, orbitPitchRef.current, rotationRangeRef.current)
           )
 
           // Ensure zoom remains enabled during auto-rotation

@@ -344,18 +344,21 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
         const viewer = viewerRef.current
         if (!viewer) return
         const camera = viewer.camera
-        const amount = Cesium.Math.toRadians(15)
         if (isRotatingRef.current) {
+          const amount = Cesium.Math.toRadians(15)
           if (clockwise) {
             camera.rotateRight(amount)
           } else {
             camera.rotateLeft(amount)
           }
         } else {
+          // Pause modunda: Eksen kaymasını önlemek için Dünya'nın düşey ekseni (ellipsoid normal) etrafında 2 derece döndür
+          const amount = Cesium.Math.toRadians(2)
+          const localUp = viewer.scene.globe.ellipsoid.geodeticSurfaceNormal(camera.position, new Cesium.Cartesian3())
           if (clockwise) {
-            camera.lookRight(amount)
+            camera.look(localUp, -amount)
           } else {
-            camera.lookLeft(amount)
+            camera.look(localUp, amount)
           }
         }
       },

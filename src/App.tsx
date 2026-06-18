@@ -577,21 +577,18 @@ export default function App() {
         stream = mergerCanvas.captureStream ? mergerCanvas.captureStream() : (mergerCanvas as any).captureStream()
       }
 
-      // Configure high quality codec dynamically by selecting the best supported format (stable 35 Mbps)
-      const requestedTypes = [
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8',
-        'video/webm',
-        'video/mp4'
-      ]
-      const supportedType = requestedTypes.find(type => MediaRecorder.isTypeSupported(type)) || ''
-
+      // Configure codec with fallback and safe 8 Mbps bitrate
       const recordingOptions = { 
-        mimeType: supportedType,
-        videoBitsPerSecond: 35000000 // 35 Mbps - High quality, extremely stable across devices
+        mimeType: MediaRecorder.isTypeSupported('video/webm;codecs=vp8') ? 'video/webm;codecs=vp8' : 'video/webm',
+        videoBitsPerSecond: 8000000 // 8 Mbps (Güvenli başlangıç sınırı)
       }
 
       const mediaRecorder = new MediaRecorder(stream, recordingOptions)
+      
+      mediaRecorder.onerror = (event) => {
+        console.error("Kritik Donanımsal Kayıt Hatası:", (event as any).error)
+        alert("MediaRecorder İç Hatası: " + ((event as any).error ? (event as any).error.name : 'Unknown'))
+      }
       const chunks: Blob[] = []
 
       mediaRecorder.ondataavailable = (e) => {

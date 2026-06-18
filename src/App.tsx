@@ -428,18 +428,17 @@ export default function App() {
       }
       console.log("Cesium canvas found for HD recording:", cesiumCanvas)
 
-      // Create memory-resident merger canvas and match dimensions exactly to backing store
+      // Create memory-resident merger canvas and match dimensions exactly to drawing buffer for raw WebGL pixel sharpness
       const mergerCanvas = document.createElement('canvas')
-      mergerCanvas.width = cesiumCanvas.width
-      mergerCanvas.height = cesiumCanvas.height
+      mergerCanvas.width = (cesiumCanvas as any).drawingBufferWidth
+      mergerCanvas.height = (cesiumCanvas as any).drawingBufferHeight
       const ctx = mergerCanvas.getContext('2d')
       if (!ctx) {
         throw new Error("Failed to get 2D context from merger canvas")
       }
 
-      // Smooth rendering configurations
-      ctx.imageSmoothingEnabled = true
-      ctx.imageSmoothingQuality = 'high'
+      // Disable image smoothing (anti-blur) so pixels stay crystal clear
+      ctx.imageSmoothingEnabled = false
 
       // requestAnimationFrame Render Loop
       const drawFrame = () => {
@@ -451,7 +450,7 @@ export default function App() {
 
           // B) If showBrandingCard is true, draw the Realtor branding card statically on top
           if (showBrandingCard) {
-            const scale = cesiumCanvas.width / cesiumCanvas.clientWidth
+            const scale = (cesiumCanvas as any).drawingBufferWidth / cesiumCanvas.clientWidth
 
             ctx.save()
             // Scale all subsequent drawings to high-resolution backing store coordinates
@@ -574,16 +573,23 @@ export default function App() {
         stream = mergerCanvas.captureStream ? mergerCanvas.captureStream() : (mergerCanvas as any).captureStream()
       }
 
-      // Configure mobile friendly h264 codec with fallback and 40 Mbps bitrate
+      // Configure high quality codec with fallback and 60 Mbps bitrate
       let recordingOptions = { 
-        mimeType: 'video/webm;codecs=h264', // H264 is conditionally required for mobile playback
-        videoBitsPerSecond: 40000000 // 40 Mbps ultra high quality
+        mimeType: 'video/webm;codecs=vp9', // VP9 is extremely sharp for map textures
+        videoBitsPerSecond: 60000000 // 60 Mbps ultra high quality
       }
 
       if (!MediaRecorder.isTypeSupported(recordingOptions.mimeType)) {
         recordingOptions = { 
-          mimeType: 'video/webm;codecs=vp9', 
-          videoBitsPerSecond: 40000000 
+          mimeType: 'video/webm;codecs=h264', // Fallback to H264 for mobile compatibility
+          videoBitsPerSecond: 60000000 
+        }
+      }
+
+      if (!MediaRecorder.isTypeSupported(recordingOptions.mimeType)) {
+        recordingOptions = { 
+          mimeType: 'video/webm', 
+          videoBitsPerSecond: 60000000 
         }
       }
 

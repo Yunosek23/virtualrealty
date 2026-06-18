@@ -559,14 +559,14 @@ export default function App() {
             ctx.restore()
           }
         } catch (error) {
-          console.error("Render frame error:", error)
+          console.error("Döngü İçi Çizim Hatası:", error)
         }
 
-        requestAnimationFrame(drawFrame)
+        // Recursive rendering check - loop only runs while MediaRecorder is actively recording
+        if (isRecordingActive) {
+          requestAnimationFrame(drawFrame)
+        }
       }
-
-      // Start loop
-      requestAnimationFrame(drawFrame)
 
       // Capture stream from merger canvas
       let stream: MediaStream
@@ -583,18 +583,21 @@ export default function App() {
         videoBitsPerSecond: 8000000 // 8 Mbps (Güvenli başlangıç sınırı)
       }
 
+      console.log("MediaRecorder setup with options:", recordingOptions)
       const mediaRecorder = new MediaRecorder(stream, recordingOptions)
-      
-      mediaRecorder.onerror = (event) => {
-        console.error("Kritik Donanımsal Kayıt Hatası:", (event as any).error)
-        alert("MediaRecorder İç Hatası: " + ((event as any).error ? (event as any).error.name : 'Unknown'))
-      }
       const chunks: Blob[] = []
 
+      // Register observers BEFORE starting MediaRecorder
       mediaRecorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
           chunks.push(e.data)
+          console.log("Chunk verisi alındı! Boyut:", e.data.size)
         }
+      }
+
+      mediaRecorder.onerror = (event) => {
+        console.error("Kritik Donanımsal Kayıt Hatası:", (event as any).error)
+        alert("MediaRecorder İç Hatası: " + ((event as any).error ? (event as any).error.name : 'Unknown'))
       }
 
       mediaRecorder.onstop = () => {
@@ -662,19 +665,25 @@ export default function App() {
         }, 1500)
       }
 
-      // Start the actual recording (collect data every 100ms)
-      mediaRecorder.start(100)
-      console.log("MediaRecorder started successfully.")
+      // Start the recursive rendering loop first to guarantee frame supply
+      requestAnimationFrame(drawFrame)
 
-      // Record for selected seconds dynamically
+      // Start the actual recording, requesting data collection slices every 1000ms
+      mediaRecorder.start(1000)
+      console.log("MediaRecorder BAŞLADI, state:", mediaRecorder.state)
+
+      // Record for selected seconds dynamically (strictly parsed)
       let elapsedSeconds = 0
-      const duration = videoDuration
+      const duration = typeof videoDuration === 'number' ? videoDuration : parseInt(String(videoDuration)) || 15
+      console.log("Kayıt Süresi Başlatılıyor (Saniye):", duration)
+
       const progressInterval = setInterval(() => {
         elapsedSeconds++
         setRecordingProgress(Math.min(100, Math.round((elapsedSeconds / duration) * 100)))
         
         if (elapsedSeconds >= duration) {
           clearInterval(progressInterval)
+          console.log("Zaman doldu, stop() tetikleniyor.")
           if (mediaRecorder.state !== 'inactive') {
             mediaRecorder.stop()
           }

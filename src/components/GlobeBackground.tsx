@@ -68,7 +68,7 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
     const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null)
 
     // Orbit/rotation state refs
-    const orbitCenterRef = useRef<{ lat: number; lng: number }>({ lat: 20, lng: 0 })
+    const orbitCenterRef = useRef<{ lat: number; lng: number; height?: number }>({ lat: 20, lng: 0 })
     const isRotatingRef = useRef<boolean>(true)
     const lastTimeRef = useRef<number>(performance.now())
     const rotationRangeRef = useRef<number>(25000000)
@@ -191,7 +191,7 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
         }
 
         isRotatingRef.current = false
-        orbitCenterRef.current = { lat, lng }
+        orbitCenterRef.current = { lat, lng, height: 0 }
 
         // Remove old address pin
         if (addressPinEntityRef.current) {
@@ -396,10 +396,15 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
             const cartographic = Cesium.Cartographic.fromCartesian(pickedCartesian)
             const lng = Cesium.Math.toDegrees(cartographic.longitude)
             const lat = Cesium.Math.toDegrees(cartographic.latitude)
-            orbitCenterRef.current = { lat, lng }
+            const height = cartographic.height
+            orbitCenterRef.current = { lat, lng, height }
           }
 
-          const target = Cesium.Cartesian3.fromDegrees(orbitCenterRef.current.lng, orbitCenterRef.current.lat)
+          const target = Cesium.Cartesian3.fromDegrees(
+            orbitCenterRef.current.lng, 
+            orbitCenterRef.current.lat, 
+            orbitCenterRef.current.height || 0
+          )
           const distance = Cesium.Cartesian3.distance(viewer.camera.positionWC, target)
           if (distance > 5 && distance < 30000) {
             rotationRangeRef.current = distance
@@ -515,7 +520,11 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
       const checkCamera = () => {
         if (!orbitCenterRef.current) return
 
-        const propertyTargetCartesianPosition = Cesium.Cartesian3.fromDegrees(orbitCenterRef.current.lng, orbitCenterRef.current.lat)
+        const propertyTargetCartesianPosition = Cesium.Cartesian3.fromDegrees(
+          orbitCenterRef.current.lng,
+          orbitCenterRef.current.lat,
+          orbitCenterRef.current.height || 0
+        )
         // Cesium's camera.position is in world coordinates when camera.transform is identity (Matrix4.IDENTITY).
         // If lookAt transform is active, we use camera.positionWC for world coordinates to avoid coordinate mismatch.
         const cameraPos = viewer.camera.transform.equals(Cesium.Matrix4.IDENTITY) 
@@ -615,7 +624,11 @@ export const GlobeBackground = forwardRef<GlobeHandle, GlobeBackgroundProps>(
 
       const onTick = () => {
         if (isRotatingRef.current && orbitCenterRef.current) {
-          const propertyTargetCartesianPosition = Cesium.Cartesian3.fromDegrees(orbitCenterRef.current.lng, orbitCenterRef.current.lat)
+          const propertyTargetCartesianPosition = Cesium.Cartesian3.fromDegrees(
+            orbitCenterRef.current.lng, 
+            orbitCenterRef.current.lat,
+            orbitCenterRef.current.height || 0
+          )
           const transform = Cesium.Transforms.eastNorthUpToFixedFrame(propertyTargetCartesianPosition)
           
           const now = performance.now()
